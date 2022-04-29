@@ -8,16 +8,16 @@ import com.test.parkingslot.model.Spot;
 import com.test.parkingslot.model.SpotStatus;
 import com.test.parkingslot.repository.SpotRepository;
 import com.test.parkingslot.service.SpotService;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.util.HashSet;
 import java.util.Set;
 
 @Service
+@RequiredArgsConstructor
 public class SpotServiceImpl implements SpotService {
     private final Set<String> bookedSpots = new HashSet<>();
-    @Autowired
     SpotRepository spotRepository;
 
     @Override
@@ -43,33 +43,23 @@ public class SpotServiceImpl implements SpotService {
 
     @Override
     public Spot changeStatus(Long id, boolean isFree, String carNumber) {
-        Spot spot = spotRepository.findById(id).orElseThrow(NotFoundException::new);
-        spot.setAvailableStatus(isFree);
-
-        if (!isFree) {
-            bookedSpots.remove(carNumber);
-        }
-
-        if (isFree) {
-            bookedSpots.add(carNumber);
-        }
-
-        return spotRepository.save(spot);
+        return isFree
+                ? releaseSpot(id, carNumber)
+                : bookSpot(id, carNumber);
     }
 
-    @Override
     public void bookSpot(CreateBookingRequest request) {
-
         if (getAvailableNumberOfSpots() > 0 && !bookedSpots.contains(request.getCarNumber())) {
             bookedSpots.add(request.getCarNumber());
-        } else throw new NoAvailableSpots();
+            return;
+        }
+        throw new NoAvailableSpots();
     }
 
     @Override
     public void cancel(String carNumber) {
         bookedSpots.remove(carNumber);
     }
-
 
     private int getSpotAmount() {
         return spotRepository.findAllByAvailableStatusIsTrue().size();
@@ -89,5 +79,23 @@ public class SpotServiceImpl implements SpotService {
 
     private int getNonAvailableNumberOfSpots() {
         return getBusySpotAmount() + getBookedSpotAmount();
+    }
+
+    private Spot bookSpot(Long id, String carNumber) {
+        Spot spot = spotRepository.findById(id)
+                .orElseThrow(NotFoundException::new);
+        spot.setAvailableStatus(false);
+        bookedSpots.add(carNumber);
+
+        return spotRepository.save(spot);
+    }
+
+    private Spot releaseSpot(Long id, String carNumber) {
+        Spot spot = spotRepository.findById(id)
+                .orElseThrow(NotFoundException::new);
+        spot.setAvailableStatus(true);
+        bookedSpots.remove(carNumber);
+
+        return spotRepository.save(spot);
     }
 }
